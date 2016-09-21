@@ -3,6 +3,7 @@ package jp.techacademy.toshiakinishiyama.jumpactiongame;
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.Preferences;
 import com.badlogic.gdx.ScreenAdapter;
+import com.badlogic.gdx.audio.Sound;
 import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.OrthographicCamera;
 import com.badlogic.gdx.graphics.Texture;
@@ -56,8 +57,10 @@ public class GameScreen extends ScreenAdapter
     Random mRandom;                 // 乱数を取得するためのクラス
     List<Step> mSteps;              // 生成して配置した 踏み台 を保持するリスト
     List<Star> mStars;              // 生成して配置した スター を保持するリスト
-    Ufo mUfo;                       // 生成して配置した ゴール を保持するリスト
-    Player mPlayer;                 // 生成して配置した プレイヤー を保持するリスト
+    Ufo mUfo;                       // 生成して配置した ゴール を保持する
+    Player mPlayer;                 // 生成して配置した プレイヤー を保持する
+    //List<Enemy> mEnemyList;        // 生成して配置した 敵キャラ を保持するリスト（減点ゲーム用）
+    Enemy mEnemy;                   // 生成して配置した 敵キャラ を保持する（ゲームオーバー用）
 
     float mHeightSoFar;           // プレイヤーが地面からどれだけ離れたかを保持する
     int mGameState;                // ゲームの状態を保持する
@@ -67,6 +70,8 @@ public class GameScreen extends ScreenAdapter
     int mScore;                    // スコア
     int mHighScore;               // ハイスコア
     Preferences mPrefs;            // データ永続化（キーと値でデータを保存する）
+
+    Sound mSound;                   // 効果音
 
     public GameScreen(JumpActionGame game) {
         // 引数で受け取った JumpActionGame クラスをメンバ変数に保持
@@ -94,11 +99,15 @@ public class GameScreen extends ScreenAdapter
         mRandom = new Random();
         mSteps = new ArrayList<Step>();
         mStars = new ArrayList<Star>();
+        //mEnemyList = new ArrayList<Enemy>();          // 減点ゲーム用
         mGameState = GAME_STATE_READY;
         mTouchPoint = new Vector3();
         mFont = new BitmapFont(Gdx.files.internal("font.fnt"), Gdx.files.internal("font.png"), false);
         mFont.getData().setScale(0.8f);
         mScore = 0;
+
+        // 効果音の準備
+        mSound = Gdx.audio.newSound(Gdx.files.internal("data/Hit02-1.mp3"));
 
         // ハイスコアを Preferences から取得する
         mPrefs = Gdx.app.getPreferences("jp.techacademy.toshiakinishiyama.jumpactiongame");
@@ -147,6 +156,15 @@ public class GameScreen extends ScreenAdapter
         // UFO
         mUfo.draw(mGame.batch);
 
+        // 敵キャラ
+        /* 減点ゲーム用
+        for (int i = 0; i < mEnemyList.size(); i++) {
+            mEnemyList.get(i).draw(mGame.batch);
+        }
+        */
+        // ゲームオーバー用
+        mEnemy.draw(mGame.batch);
+
         //Player
         mPlayer.draw(mGame.batch);
 
@@ -176,6 +194,7 @@ public class GameScreen extends ScreenAdapter
         Texture starTexture = new Texture("star.png");
         Texture playerTexture = new Texture("uma.png");
         Texture ufoTexture = new Texture("ufo.png");
+        Texture enemyTexture = new Texture("enemy.png");
 
         // StepとStarをゴールの高さまで配置していく
         float y = 0;
@@ -189,11 +208,20 @@ public class GameScreen extends ScreenAdapter
             step.setPosition(x, y);
             mSteps.add(step);
 
+            // スターを配置
             if (mRandom.nextFloat() > 0.6f) {
                 Star star = new Star(starTexture, 0, 0, 72, 72);
                 star.setPosition(step.getX() + mRandom.nextFloat(), step.getY() + Star.STAR_HEIGHT + mRandom.nextFloat() * 3);
                 mStars.add(star);
             }
+
+            /* 敵キャラを配置（減点ゲーム用）
+            if (mRandom.nextFloat() > 0.6f) {
+                Enemy enemy = new Enemy(enemyTexture, 0, 0, 72, 72);
+                enemy.setPosition(step.getX() + mRandom.nextFloat(), step.getY() + Enemy.ENEMY_HEIGHT + mRandom.nextFloat() * 3);
+                mEnemyList.add(enemy);
+            }
+            */
 
             y += (maxJumpHeight - 0.5f);
             y -= mRandom.nextFloat() * (maxJumpHeight / 3);
@@ -202,6 +230,10 @@ public class GameScreen extends ScreenAdapter
         // Playerを配置
         mPlayer = new Player(playerTexture, 0, 0, 72, 72);
         mPlayer.setPosition(WORLD_WIDTH / 2 - mPlayer.getWidth() / 2, Step.STEP_HEIGHT);
+
+        // 敵キャラを配置（ゲームオーバー用）
+        mEnemy = new Enemy(enemyTexture, 0, 0, 72, 72);
+        mEnemy.setPosition(WORLD_WIDTH / 2 - Enemy.ENEMY_WIDTH / 2, 50);
 
         // ゴールのUFOを配置
         mUfo = new Ufo(ufoTexture, 0, 0, 120, 74);
@@ -300,6 +332,38 @@ public class GameScreen extends ScreenAdapter
             }
         }
 
+        /* 敵キャラ との当たり判定（減点ゲーム用）
+        for(int i = 0; i < mEnemyList.size(); i++)
+        {
+            Enemy enemy = mEnemy.get(i);
+
+            if(enemy.mState == Enemy.ENEMY_NONE)
+            {
+                continue;
+            }
+
+            if(mPlayer.getBoundingRectangle().overlaps(enemy.getBoundingRectangle()))
+            {
+                enemy.get();
+                // 効果音再生
+                mSound.play(1.0F);
+                // スコアを減点する
+                mScore--;
+                break;
+            }
+        }
+        mSound.dispose();
+        */
+
+        // 敵キャラ との当たり判定（ゲームオーバー用）
+        if(mPlayer.getBoundingRectangle().overlaps(mEnemy.getBoundingRectangle()))
+        {
+            // ゴール
+            mSound.play(1.0F);
+            mGameState = GAME_STATE_GAMEOVER;
+            return;
+        }
+
         // Step との当たり判定
         // 上昇中は Step との当たり判定を確認しない
         if(mPlayer.velocity.y > 0)
@@ -344,6 +408,7 @@ public class GameScreen extends ScreenAdapter
     {
         if (Gdx.input.justTouched())
         {
+            mSound.dispose();
             mGame.setScreen(new ResultScreen(mGame, mScore));
         }
     }
